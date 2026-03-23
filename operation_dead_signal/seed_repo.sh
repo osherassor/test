@@ -11,22 +11,17 @@ FLAG2="${BUILD_FLAG2:-CF2026{3xp0s3d_pr0f1l3_d4t4_1s_4ls0_s3ns1t1v3}}"
 
 log() { echo "[seed] $*"; }
 
-# ── Wait for API to be fully ready (not just nginx health) ───────────────────
-log "Waiting for GitLab API to be fully ready..."
-until curl -sf "${GITLAB_URL}/api/v4/version" > /dev/null 2>&1; do
-  sleep 10
-done
-log "API is ready."
-
-# ── Get admin token ──────────────────────────────────────────────────────────
-log "Obtaining admin API token..."
+# ── Get admin token (retries until GitLab is fully up and OAuth works) ───────
+log "Waiting for GitLab OAuth to be ready..."
 TOKEN=""
 until [ -n "$TOKEN" ]; do
-  TOKEN=$(curl -sf --request POST "${GITLAB_URL}/oauth/token" \
+  TOKEN=$(curl -s --request POST "${GITLAB_URL}/oauth/token" \
     --data "grant_type=password&username=${ADMIN_USER}&password=${ADMIN_PASS}" \
+    2>/dev/null \
     | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('access_token',''))" 2>/dev/null || true)
-  [ -z "$TOKEN" ] && sleep 5
+  [ -z "$TOKEN" ] && log "  OAuth not ready yet, retrying in 10s..." && sleep 10
 done
+log "Got admin token."
 
 api_post() {
   curl -sf --request POST "${GITLAB_URL}${1}" \
